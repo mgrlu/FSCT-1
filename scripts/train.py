@@ -1,4 +1,4 @@
-from tools import load_file, save_file, get_fsct_path
+from tools import load_file, save_file, get_fsct_path, subsample_point_cloud
 from model import Net
 from train_datasets import TrainingDataset, ValidationDataset
 from fsct_exceptions import NoDataFound
@@ -128,7 +128,7 @@ class TrainModel:
         print("Pre-processing point cloud...")
         # Global shift the point cloud to avoid loss of precision during segmentation.
         point_cloud, _ = self.global_shift_to_origin(point_cloud)
-
+        point_cloud = subsample_point_cloud(point_cloud, self.parameters["subsampling_min_spacing"], self.parameters["num_cpu_cores_preprocessing"])
         point_cloud_mins = np.min(point_cloud[:, :3], axis=0)
         point_cloud_maxes = np.max(point_cloud[:, :3], axis=0)
         point_cloud_ranges = point_cloud_maxes - point_cloud_mins
@@ -212,14 +212,14 @@ class TrainModel:
             root_dir=os.path.join(get_fsct_path("data"), "train/sample_dir/"),
             device=self.device,
             min_sample_points=self.parameters["min_points_per_box"],
-            max_sample_points=parameters["max_points_per_box"],
+            max_sample_points=self.parameters["max_points_per_box"],
         )
         if len(train_dataset) == 0:
             raise NoDataFound("No training samples found.")
 
         self.train_loader = DataLoader(
             train_dataset,
-            batch_size=parameters["train_batch_size"],
+            batch_size=self.parameters["train_batch_size"],
             shuffle=True,
             num_workers=self.parameters["num_cpu_cores_deep_learning"],
             drop_last=True,
@@ -236,7 +236,7 @@ class TrainModel:
 
             self.validation_loader = DataLoader(
                 validation_dataset,
-                batch_size=parameters["validation_batch_size"],
+                batch_size=self.parameters["validation_batch_size"],
                 shuffle=True,
                 num_workers=self.parameters["num_cpu_cores_deep_learning"],
                 drop_last=True,
@@ -265,6 +265,7 @@ class TrainModel:
                 pass
 
         model = model.to(self.device)
+        print(self.parameters["learning_rate"])
         optimizer = optim.Adam(
             filter(lambda p: p.requires_grad, model.parameters()), lr=self.parameters["learning_rate"]
         )
@@ -273,8 +274,8 @@ class TrainModel:
         val_epoch_acc = 0
 
         for epoch in range(self.parameters["num_epochs"]):
-            print("=====================================================================")
-            print("EPOCH ", epoch)
+            # print("=====================================================================")
+            print(f"EPOCH {epoch}=====================================================================")
             # TRAINING
             model.train()
             running_loss = 0.0
@@ -300,28 +301,29 @@ class TrainModel:
                         np.hstack((data.pos.cpu() + np.array([i * 7, 0, 0]), data.y.cpu().T, preds.cpu().T)),
                     )
                 )
-                if i % 20 == 0:
-                    print(
-                        "Train sample accuracy: ",
-                        np.around(running_acc / (i + 1), 4),
-                        ", Loss: ",
-                        np.around(running_loss / (i + 1), 4),
-                    )
+                # if i % 20 == 0:
+                #     # print(
+                #     #     "Train sample accuracy: ",
+                #     #     np.around(running_acc / (i + 1), 4),
+                #     #     ", Loss: ",
+                #     #     np.around(running_loss / (i + 1), 4),
+                #     # )
 
-                    if self.parameters["generate_point_cloud_vis"]:
-                        save_file(
-                            os.path.join(get_fsct_path("data"), "latest_prediction.las"),
-                            running_point_cloud_vis,
-                            headers_of_interest=["x", "y", "z", "label", "prediction"],
-                        )
+                #     if self.parameters["generate_point_cloud_vis"]:
+                #         save_file(
+                #             os.path.join(get_fsct_path("data"), "latest_prediction.las"),
+                #             running_point_cloud_vis,
+                #             headers_of_interest=["x", "y", "z", "label", "prediction"],
+                #         )
                 i += 1
+                print(".", end="")
             epoch_loss = running_loss / len(self.train_loader)
             epoch_acc = running_acc / len(self.train_loader)
             self.update_log(epoch, epoch_loss, epoch_acc, val_epoch_loss, val_epoch_acc)
             print("Train epoch accuracy: ", np.around(epoch_acc, 4), ", Loss: ", np.around(epoch_loss, 4), "\n")
 
             # VALIDATION
-            print("Validation")
+            # print("Validation")
 
             if self.parameters["perform_validation_during_training"]:
                 model.eval()
@@ -353,7 +355,7 @@ class TrainModel:
                 print(
                     "Validation epoch accuracy: ", np.around(val_epoch_acc, 4), ", Loss: ", np.around(val_epoch_loss, 4)
                 )
-                print("=====================================================================")
+                # print("=====================================================================")
             torch.save(
                 model.state_dict(),
                 os.path.join(get_fsct_path("model"), self.parameters["model_filename"]),

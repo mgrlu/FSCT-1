@@ -24,10 +24,12 @@ class TrainingDataset(Dataset):
             shuffle_index = list(range(point_cloud.shape[0]))
             random.shuffle(shuffle_index)
             point_cloud = point_cloud[shuffle_index[: self.max_sample_points]]
-
+        shuffle_index = list(range(point_cloud.shape[0]))
+        random.shuffle(shuffle_index)
+        point_cloud = point_cloud[shuffle_index]
         x = point_cloud[:, :3]
         y = point_cloud[:, self.label_index] - 1
-        x, y = augmentations(x, y, self.min_sample_points)
+        # x, y = augmentations(x, y, self.min_sample_points)
         if np.all(y != 0):
             y[y == 2] = 3  # if no ground is present, CWD is relabelled as stem.
         x = torch.from_numpy(x.copy()).type(torch.float).to(self.device)
@@ -36,7 +38,7 @@ class TrainingDataset(Dataset):
         # Place sample at origin
         global_shift = torch.mean(x[:, :3], axis=0)
         x = x - global_shift
-
+        # print(index, x.shape, y.shape)
         data = Data(pos=x, x=None, y=y)
         return data
 
@@ -118,21 +120,21 @@ def augmentations(x, y, min_sample_points):
             points = points + np.random.normal(0, random_noise_std_dev, size=(np.shape(points)[0], 3))
         return points
 
-    if np.all(y != 0) and np.all(
-        y != 2
-    ):  # if no terrain or CWD are present, it's ok to rotate extremely. Terrain shouldn't be above stems or CWD.
-        rotations = [np.random.uniform(-90, 90), np.random.uniform(-90, 90), np.random.uniform(-180, 180)]
-    else:
-        rotations = [np.random.uniform(-25, 25), np.random.uniform(-25, 25), np.random.uniform(-180, 180)]
-    x = rotate_3d(x, rotations)
-    x = random_scale_change(x, 0.8, 1.2)
-    if np.random.uniform(0, 1) >= 0.5 and x.shape[0] > min_sample_points:
-        x, y = subsample_point_cloud(x, y, np.random.uniform(0.01, 0.025), min_sample_points)
+    # if np.all(y != 0) and np.all(
+    #     y != 2
+    # ):  # if no terrain or CWD are present, it's ok to rotate extremely. Terrain shouldn't be above stems or CWD.
+    #     rotations = [np.random.uniform(-90, 90), np.random.uniform(-90, 90), np.random.uniform(-180, 180)]
+    # else:
+    #     rotations = [np.random.uniform(-25, 25), np.random.uniform(-25, 25), np.random.uniform(-180, 180)]
+    # x = rotate_3d(x, rotations)
+    # x = random_scale_change(x, 0.8, 1.2)
+    # if np.random.uniform(0, 1) >= 0.5 and x.shape[0] > min_sample_points:
+    #     x, y = subsample_point_cloud(x, y, np.random.uniform(0.01, 0.025), min_sample_points)
 
-    if np.random.uniform(0, 1) >= 0.8 and x.shape[0] > min_sample_points:
-        x, y = random_point_removal(x, y, min_sample_points)
+    # if np.random.uniform(0, 1) >= 0.8 and x.shape[0] > min_sample_points:
+    #     x, y = random_point_removal(x, y, min_sample_points)
 
-    x = random_noise_addition(x)
+    # x = random_noise_addition(x)
     return x, y
 
 

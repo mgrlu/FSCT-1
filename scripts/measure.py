@@ -908,9 +908,13 @@ class MeasureTree:
                     print("\r", j, "/", max_j, end="")
                 j += 1
         full_cyl_array = np.vstack(outputlist)
+        np.save(self.output_dir + "full_cyl_array.npy", full_cyl_array)
+
         print("\r", max_j, "/", max_j, end="")
         print("\nDone\n")
-
+        print("----")
+        print(self.cyl_dict)
+        print("----")
         print("Deleting cyls with CCI less than:", self.parameters["minimum_CCI"])
         full_cyl_array = full_cyl_array[full_cyl_array[:, self.cyl_dict["CCI"]] >= self.parameters["minimum_CCI"]]
 
